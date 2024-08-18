@@ -5,7 +5,7 @@ Created on Fri Aug  2 22:35:23 2024
 
 @author: robertgc
 """
-
+# %%
 import pickle
 import openturns as ot
 import numpy as np
@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 from corner import corner
 from lib.custom_openturns import log_pdf_x, \
     mu_post_truncated_normal, var_post_truncated_normal
-import seaborn as sns
 import pandas as pd
 import scipy.stats as stats
 
@@ -79,7 +78,8 @@ means = np.array([20.,5.,.5])
 initial_state = np.ones(2*ndim+ndim*nexp)
 
 initial_state[:ndim] = means
-initial_state[ndim:2*ndim] = np.array([20,20,.5])**2
+# use different initial sigmas to distinguish logpdfs
+initial_state[ndim:2*ndim] = np.array([20.0, 15.0, 0.5])**2
 
 initial_state[2*ndim::3] = 20.
 initial_state[2*ndim+1::3] =  5. 
@@ -150,13 +150,13 @@ sampler = ot.Gibbs(samplers)
 
 #%%
 
-samples = sampler.getSample(3000)
+samples = sampler.getSample(24000)
 
 #%%
 
 names = ['diff','gbsat','crack']
 
-hypost = samples.asDataFrame().iloc[1000:,:6]
+hypost = samples.asDataFrame().iloc[:,:6] # interesting to look at whole sample
 hypost.iloc[:,-3:] = hypost.iloc[:,-3:].apply(np.sqrt)
 
 

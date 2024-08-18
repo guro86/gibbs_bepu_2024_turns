@@ -43,6 +43,8 @@ basis = ot.ConstantBasisFactory(dimension).build()
 #Squared exponential kernel with dimension lenbght scales
 #Unity amplitude
 covarianceModel = ot.SquaredExponential([1.0] * dimension, [1.0])
+#We set a little bit of noise to regularize the fitting
+covarianceModel.setNuggetFactor(1e-3)
 
 #Function returning the GP for exp = i
 def func(exp):
@@ -53,10 +55,7 @@ def func(exp):
         ytrain[:,exp].reshape(-1,1), 
         covarianceModel, 
         basis)
-    
-    #We set a little bit of noise to regularize the fitting
-    algo.setNoise([1e-3]*225)
-    
+
     #We run it 
     algo.run()
     
