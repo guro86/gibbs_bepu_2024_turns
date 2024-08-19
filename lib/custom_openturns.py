@@ -88,10 +88,9 @@ class var_post_truncated_normal(ot.OpenTURNSPythonFunction):
 #Create a logpdf for the latent parameters
 class log_pdf_x(ot.OpenTURNSPythonFunction):
     
-    def __init__(self, dim, exp, like, metamodel, ndim=3, nexp=31):
+    def __init__(self, exp, like, metamodel, ndim=3, nexp=31):
     
         self._ndim = ndim
-        self._dim = dim
         self._exp = exp
         self._like = like
         self._metamodel = metamodel
@@ -105,14 +104,7 @@ class log_pdf_x(ot.OpenTURNSPythonFunction):
         
     def _exec(self, state):
         
-        #Get dimension and experiment number 
-        dim = self._dim
-        # exp = self._exp
-        
         xindices = self._xindices
-        
-        #Get number of total dimensions
-        ndim = self._ndim
         
         #Get the metamodel for the experiment
         metamodel = self._metamodel
@@ -125,14 +117,21 @@ class log_pdf_x(ot.OpenTURNSPythonFunction):
             [state[i] for i in xindices]
             )
         
-        #get xindex for dimension (within experiment)
-        xi = x[dim]
-        
         #Get mu
-        mu = state[dim]
+        mu = np.array(
+            [state[i] for i in range(self._ndim)]
+        )
         
         #get sig
-        sig = np.sqrt(state[dim+ndim])
+        sig = np.sqrt(
+            [state[i] for i in range(self._ndim, 2*self._ndim)]
+        )
+
+        # compute logdNormal argument
+        normalized = (x - mu) / sig
+
+        # compute logdNormals
+        logps = [ot.DistFunc.logdNormal(normalized[i]) for i in range(self._ndim)]
         
         #Use the metamodel to predict experiment 
         pred = metamodel(x)
@@ -142,7 +141,6 @@ class log_pdf_x(ot.OpenTURNSPythonFunction):
         
         #Add the logp coming from the hierarchical part
         #logp += ot.Normal(mu,sig).computeLogPDF(xi) # slow
-        logp += ot.DistFunc.logdNormal((xi - mu) / sig) - np.log(sig) # 6 x faster
-        # The - np.log(sig) term could be removed as it is constant w.r.t. x
-                        
+        logp += np.sum(logps)
+
         return [logp]
