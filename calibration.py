@@ -146,6 +146,9 @@ sampler = ot.Gibbs(samplers)
 
 samples = sampler.getSample(24000)
 
+acceptance = [sampler.getMetropolisHastingsCollection()[i].getAcceptanceRate() for i in range(len(samplers))]
+print(acceptance)
+
 #%%
 
 names = ['diff','gbsat','crack']
