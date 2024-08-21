@@ -6,27 +6,21 @@ Created on Fri Aug  2 22:35:23 2024
 @author: robertgc
 """
 # %%
-import pickle
 import openturns as ot
+from openturns.viewer import View
 import numpy as np
 import matplotlib.pyplot as plt
 from corner import corner
-from lib.custom_openturns import (
-    log_pdf_x,
-    mu_post_truncated_normal,
-    var_post_truncated_normal,
-)
 import pandas as pd
 import scipy.stats as stats
 
-from copulogram import Copulogram
-
 # %%
-
 # Load meta models and data
 from fuel_performance import FuelPerformance
 
 fp = FuelPerformance()
+ndim = fp.Xtrain.getDimension()
+nexp = fp.ytrain.getDimension()
 
 # %%
 # Defaulting gb_sweeping and athermal release
@@ -70,15 +64,11 @@ class PosteriorParametersMu(ot.OpenTURNSPythonFunction):
     def __init__(self, dim=0, lb=-100, ub=100):
         # Get dimension and total number of dimensions
         self._dim = dim
-        self._ndim = fp.Xtrain.getDimension()
-
-        # Total number of experiments
-        self._nexp = len(metamodels)
 
         # state description: mu values, then sigma values, then for each experiment x values
-        state_length = (1 + 1 + self._nexp) * self._ndim
+        state_length = (1 + 1 + nexp) * ndim
         super().__init__(state_length, 4)
-        self._xindices = range(state_length)[2 * self._ndim :][dim :: self._ndim]
+        self._xindices = range(state_length)[2 * ndim :][dim :: ndim]
 
         # Get lower and upper bound
         self._lb = lb
@@ -89,7 +79,7 @@ class PosteriorParametersMu(ot.OpenTURNSPythonFunction):
         post_mean = np.mean([state[i] for i in self._xindices])
 
         # posterior std of mu = prior sigma / sqrt(nexp)
-        post_std = np.sqrt(state[self._ndim + self._dim] / self._nexp)
+        post_std = np.sqrt(state[ndim + self._dim] / nexp)
 
         # Hyperparameters of a truncated normal
         return [post_mean, post_std, self._lb, self._ub]
@@ -116,15 +106,11 @@ class PosteriorParametersSigmaSquare(ot.OpenTURNSPythonFunction):
     def __init__(self, dim=0, lb=1e-4, ub=100):
         # Get dimension and total number of dimensions
         self._dim = dim
-        self._ndim = fp.Xtrain.getDimension()
-
-        # Total number of experiments
-        self._nexp = len(metamodels)
 
         # State description: mu values, then sigma values, then for each experiment x values
-        state_length = (1 + 1 + self._nexp) * self._ndim
+        state_length = (1 + 1 + nexp) * ndim
         super().__init__(state_length, 4)
-        self._xindices = range(state_length)[2 * self._ndim :][dim :: self._ndim]
+        self._xindices = range(state_length)[2 * ndim :][dim :: ndim]
 
         # Get lower and upper bound
         self._lb = lb
@@ -137,7 +123,7 @@ class PosteriorParametersSigmaSquare(ot.OpenTURNSPythonFunction):
         squares = [(state[i] - mu) ** 2 for i in self._xindices]
 
         post_lambda = 2.0 / np.sum(squares)  # rate lambda =  1 / beta
-        post_k = self._nexp / 2.0  # shape
+        post_k = nexp / 2.0  # shape
 
         # Hyperparameters of a truncated inverse gamma
         return [post_lambda, post_k, self._lb, self._ub]
@@ -162,17 +148,12 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
     """
 
     def __init__(self, exp):
-        # Get total number of dimensions
-        self._ndim = fp.Xtrain.getDimension()
-
-        # Total number of experiments
-        self._nexp = len(metamodels)
 
         # State description: mu values, then sigma values, then for each experiment x values
-        state_length = (1 + 1 + self._nexp) * self._ndim
+        state_length = (1 + 1 + nexp) * ndim
         super().__init__(state_length, 1)
-        self._xindices = range(state_length)[2 * self._ndim :][
-            exp * self._ndim : (exp + 1) * self._ndim
+        self._xindices = range(state_length)[2 * ndim :][
+            exp * ndim : (exp + 1) * ndim
         ]
 
         # Setup experiment number and associated model and likelihood
@@ -185,13 +166,13 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
         x = np.array([state[i] for i in self._xindices])
 
         # Get mu and sigma in order to normalize x
-        mu = np.array([state[i] for i in range(self._ndim)])
-        sig = np.sqrt([state[i] for i in range(self._ndim, 2 * self._ndim)])
+        mu = np.array([state[i] for i in range(ndim)])
+        sig = np.sqrt([state[i] for i in range(ndim, 2 * ndim)])
         normalized = (x - mu) / sig
 
         # Compute the log-prior density
         logprior = np.sum(
-            [ot.DistFunc.logdNormal(normalized[i]) for i in range(self._ndim)]
+            [ot.DistFunc.logdNormal(normalized[i]) for i in range(ndim)]
         )
 
         # Use the metamodel to predict the experiment and compute the log-likelihood
@@ -204,126 +185,15 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
 
 # %%
 
-ndim = fp.Xtrain.getDimension()
-nexp = fp.ytrain.getDimension()
-
 lbs = [0.1, 0.1, 1e-4]
+lbs= [0.0] * 3
 ubs = [40, 10, 1]
+ubs = [np.inf] * 3
 
-means = np.array([20.0, 5.0, 0.5])
-
-initial_state = [
-    9.78478,
-    7.18681,
-    0.292831,
-    28.8707,
-    0.518241,
-    0.0262414,
-    11.702,
-    7.15259,
-    0.504642,
-    8.93815,
-    7.20632,
-    0.227912,
-    10.7733,
-    7.16673,
-    0.423543,
-    9.86638,
-    7.16642,
-    0.34344,
-    9.52776,
-    7.1736,
-    0.19822,
-    11.1469,
-    7.12211,
-    0.418397,
-    9.08546,
-    7.19024,
-    0.14975,
-    8.78541,
-    7.22476,
-    0.248703,
-    10.3239,
-    7.18289,
-    0.342643,
-    7.50655,
-    7.23985,
-    0.221591,
-    9.47391,
-    7.21092,
-    0.235646,
-    8.47214,
-    7.22322,
-    0.198574,
-    9.8565,
-    7.18337,
-    0.308543,
-    10.2439,
-    7.17974,
-    0.321506,
-    8.07999,
-    7.18148,
-    0.280854,
-    8.72788,
-    7.20715,
-    0.201784,
-    11.8741,
-    7.1397,
-    0.468259,
-    7.44071,
-    7.2692,
-    0.183411,
-    9.93625,
-    7.1716,
-    0.308075,
-    10.22,
-    7.18294,
-    0.343424,
-    9.60504,
-    7.19412,
-    0.290279,
-    16.2637,
-    7.10373,
-    0.572483,
-    8.60862,
-    7.20276,
-    0.248138,
-    8.75301,
-    7.17151,
-    0.241266,
-    9.777,
-    7.1634,
-    0.317432,
-    9.342,
-    7.24039,
-    0.116625,
-    9.04912,
-    7.17853,
-    0.0566619,
-    10.0503,
-    7.19752,
-    0.322601,
-    15.0076,
-    7.13199,
-    0.536823,
-    5.12208,
-    7.224,
-    0.141905,
-    9.88428,
-    7.19038,
-    0.30269,
-]  # 99
-
-# initial_state = np.ones(2*ndim+ndim*nexp)
-
-# initial_state[:ndim] = means
-# # use different initial sigmas to distinguish logpdfs
-# initial_state[ndim:2*ndim] = np.array([20.0, 15.0, 0.5])**2
-
-# initial_state[2*ndim::3] = 19.0
-# initial_state[2*ndim+1::3] = 4.0 
-# initial_state[2*ndim+2::3] = 0.4
-
+initial_mus = [10.0, 5.0, 0.3]
+initial_sigma_squares = [20.0 ** 2, 15.0 ** 2, 0.5 ** 2]
+initial_x = np.repeat([[19.0, 4.0, 0.4]], repeats=nexp, axis=0).flatten().tolist()
+initial_state = initial_mus + initial_sigma_squares + initial_x
 
 lbs_var = np.array([0.1, 0.1, 0.1]) ** 2
 ubs_var = np.array([40, 20, 10]) ** 2
@@ -380,8 +250,7 @@ sampler = ot.Gibbs(samplers)
 
 # %%
 
-samples = sampler.getSample(24000)
-
+samples = sampler.getSample(2000)
 acceptance = [
     sampler.getMetropolisHastingsCollection()[i].getAcceptanceRate()
     for i in range(len(samplers))
@@ -396,7 +265,7 @@ hypost = samples.asDataFrame().iloc[:, :6]  # interesting to look at whole sampl
 hypost.iloc[:, -3:] = hypost.iloc[:, -3:].apply(np.sqrt)
 
 
-hypost.columns = [f"{p}_{{{n}}}" for p in ["$\mu$", "$\sigma$"] for n in names]
+hypost.columns = [f"{p}_{{{n}}}" for p in ["$\\mu$", "$\\sigma$"] for n in names]
 
 # %%
 
@@ -449,24 +318,47 @@ plt.ylabel("GP predicted fgr [-]")
 plt.plot(l, l, "--")
 plt.show()
 
-# %%
-copulogram = Copulogram(hypost)
-copulogram.draw(alpha=0.05, marker=".")
-
 
 # %%
-np.log(hypost["$\\mu$_{diff}"]).plot()
-np.log(hypost["$\\mu$_{gbsat}"]).plot()
-np.log(hypost["$\\mu$_{crack}"]).plot()
+hypost_sample = ot.Sample.BuildFromDataFrame(hypost)
+pair_plots = ot.VisualTest.DrawPairs(hypost_sample)
 
-# %%
-np.log(hypost["$\\sigma$_{diff}"]).plot()
-np.log(hypost["$\\sigma$_{gbsat}"]).plot()
-np.log(hypost["$\\sigma$_{crack}"]).plot()
-plt.legend()
+for i in range(pair_plots.getNbRows()):
+    for j in range(pair_plots.getNbColumns()):
+        graph = pair_plots.getGraph(i, j)
+        graph.setXTitle(pair_plots.getGraph(pair_plots.getNbRows() - 1, j).getXTitle())
+        graph.setYTitle(pair_plots.getGraph(i, 0).getYTitle())
+        pair_plots.setGraph(i, j, graph)
 
-# %%
-hypost["$\\sigma$_{diff}"].plot()
-hypost["$\\sigma$_{gbsat}"].plot()
-hypost["$\\sigma$_{crack}"].plot()
-plt.legend()
+full_grid = ot.GridLayout(pair_plots.getNbRows() + 1, pair_plots.getNbColumns() + 1)
+for i in range(pair_plots.getNbRows()):
+    for j in range(pair_plots.getNbColumns()):
+        if len(pair_plots.getGraph(i, j).getDrawables()) > 0:
+            full_grid.setGraph(i + 1, j, pair_plots.getGraph(i, j))
+
+for i in range(full_grid.getNbRows()):
+    hist = ot.HistogramFactory().build(hypost_sample.getMarginal(i))
+    pdf = hist.drawPDF()
+    pdf.setLegends([""])
+    pdf.setTitle("")
+    full_grid.setGraph(i, i, pdf)
+
+ot.ResourceMap.SetAsBool("Contour-DefaultIsFilled", True)
+ot.ResourceMap.SetAsString("Contour-DefaultColorMap", "viridis")
+
+for i in range(1, full_grid.getNbRows()):
+    for j in range(i):
+        graph = full_grid.getGraph(i, j);
+        bb = graph.getBoundingBox()
+        cloud = graph.getDrawable(0).getImplementation()
+        cloud.setPointStyle(".")
+        data = cloud.getData()
+        dist = ot.KernelSmoothing().build(data)
+        contour = dist.drawPDF().getDrawable(0).getImplementation()
+        contour.setLevels(np.linspace(0.0, contour.getLevels()[-1], 10))
+        graph.setDrawables([contour, cloud])
+        graph.setBoundingBox(bb)
+        full_grid.setGraph(i, j, graph)
+    
+_ = View(full_grid, scatter_kw={"alpha" : 0.2})
+
