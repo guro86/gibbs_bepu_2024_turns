@@ -19,6 +19,7 @@ from fuel_performance import FuelPerformance
 
 fp = FuelPerformance()
 ndim = fp.Xtrain.getDimension()
+desc = fp.Xtrain.getDescription()
 nexp = fp.ytrain.getDimension()
 
 # %%
@@ -34,11 +35,11 @@ likes = fp.likes
 
 # Random vector for sampling of mu
 mu_rv = ot.RandomVector(ot.TruncatedNormal())
-mu_desc = ["$\\mu$_{{{}}}".format(label) for label in fp.Xtrain.getDescription()]
+mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
 
 # Random vector for sampling of sigma
 var_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
-sigma_desc = ["$\\sigma$_{{{}}}".format(label) for label in fp.Xtrain.getDescription()]
+sigma_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
 
 
 # %%
@@ -269,7 +270,7 @@ sampler_realizations = [s.getRealization() for s in samplers]
 sampler = ot.Gibbs(samplers)
 x_desc = []
 for i in range(1, nexp + 1):
-    x_desc += ["x_{{{}, {}}}".format(label, i) for label in fp.Xtrain.getDescription()]
+    x_desc += ["x_{{{}, {}}}".format(label, i) for label in desc]
 sampler.setDescription(mu_desc + sigma_desc + x_desc)
 
 # %%
@@ -298,14 +299,14 @@ hypost.columns = [f"{p}_{{{n}}}" for p in ["$\\mu$", "$\\sigma$"] for n in names
 
 # %%
 
-mu = hypost.iloc[:, :3]
-sig = hypost.iloc[:, 3:6]
+mu = samples.getMarginal(["$\\mu$_{{{}}}".format(label) for label in desc])
+sig = np.sqrt(samples.getMarginal(["$\\sigma$_{{{}}}^2".format(label) for label in desc]))
 
 
 # %%
-normal_collection = [ot.Normal(mu.iloc[i], sig.iloc[i]) for i in range(mu.shape[0])]
+normal_collection = [ot.Normal(mean, std) for (mean, std) in zip(mu, sig)]
 normal_mixture = ot.Mixture(normal_collection)
-normal_mixture.setDescription(fp.Xtrain.getDescription())
+normal_mixture.setDescription(desc)
 rv_normal_mixture = ot.RandomVector(normal_mixture)
 marg_samples = normal_mixture.getSample(nexp)
 rv_models = [ot.CompositeRandomVector(model, rv_normal_mixture) for model in metamodels]
