@@ -10,40 +10,30 @@ import openturns as ot
 from openturns.viewer import View
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
-import scipy.stats as stats
 
 # %%
-# Load meta models and data
+# Load meta models, data, likelihoods
 from fuel_performance import FuelPerformance
 
 fp = FuelPerformance()
 ndim = fp.Xtrain.getDimension()
 desc = fp.Xtrain.getDescription()
 nexp = fp.ytrain.getDimension()
-
-# %%
-# Defaulting gb_sweeping and athermal release
 metamodels = fp.models
-
-# %%
-
-# Defining some likelihoods
 likes = fp.likes
 
 # %%
-
 # Random vector for sampling of mu
 mu_rv = ot.RandomVector(ot.TruncatedNormal())
 mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
 
+# %%
 # Random vector for sampling of sigma
 var_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
 sigma_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
 
 
 # %%
-
 
 class PosteriorParametersMu(ot.OpenTURNSPythonFunction):
     """Outputs the parameters of the conditional posterior distribution of one
@@ -287,51 +277,6 @@ print("Minimum acceptance rate = ", np.min(acceptance))
 print("Maximum acceptance rate for random walk MH = ", np.max(acceptance[2 * ndim :]))
 
 # %%
-# 
-names = ["diff", "gbsat", "crack"]
-
-hypost = samples.asDataFrame().iloc[:, :6]  # interesting to look at whole sample
-hypost.iloc[:, -3:] = hypost.iloc[:, -3:].apply(np.sqrt)
-
-
-hypost.columns = [f"{p}_{{{n}}}" for p in ["$\\mu$", "$\\sigma$"] for n in names]
-
-
-# %%
-
-mu = samples.getMarginal(["$\\mu$_{{{}}}".format(label) for label in desc])
-sig = np.sqrt(samples.getMarginal(["$\\sigma$_{{{}}}^2".format(label) for label in desc]))
-
-
-# %%
-normal_collection = [ot.Normal(mean, std) for (mean, std) in zip(mu, sig)]
-normal_mixture = ot.Mixture(normal_collection)
-normal_mixture.setDescription(desc)
-rv_normal_mixture = ot.RandomVector(normal_mixture)
-marg_samples = normal_mixture.getSample(nexp)
-rv_models = [ot.CompositeRandomVector(model, rv_normal_mixture) for model in metamodels]
-predictions = [rv.getSample(100) for rv in rv_models]
-prediction_medians = [sam.computeMedian()[0] for sam in predictions]
-prediction_lb = [sam.computeQuantile(0.05)[0] for sam in predictions]
-prediction_ub = [sam.computeQuantile(0.95)[0] for sam in predictions]
-
-yerr = np.abs(np.column_stack([prediction_lb, prediction_ub]).T - prediction_medians)
-
-# %%
-
-l = np.linspace(0, 0.5)
-
-plt.errorbar(fp.meas_v, prediction_medians, yerr, fmt="o")
-
-plt.xlabel("Measurements")
-plt.ylabel("Prediction ranges")
-
-
-plt.plot(l, l, "--")
-plt.show()
-
-
-# %%
 # Represent the last sampled points (i.e. those which are least dependent on the initial state)
 # We are only interested in the :math:`\mu` and :math:`\sigma` parameters.
 
@@ -396,4 +341,53 @@ _ = View(full_grid, scatter_kw={"alpha": 0.2})
 
 
 # %%
-# ot.ResourceMap.Reload()
+# Retrieve the :math:`\mu` and :math:`\sigma^2` columns in the sample.
+
+mu = samples.getMarginal(["$\\mu$_{{{}}}".format(label) for label in desc])
+sigma_square = np.sqrt(samples.getMarginal(["$\\sigma$_{{{}}}^2".format(label) for label in desc]))
+
+
+# %%
+# Build the posterior distribution of :math:`x_{diff}, x_{gb_saturation}, x_{crack}` as a mixture
+# by averaging out the :math:`\mu` and :math:`\sigma` parameters.
+
+normal_collection = [ot.Normal(mean, std) for (mean, std) in zip(mu, sigma_square)]
+normal_mixture = ot.Mixture(normal_collection)
+normal_mixture.setDescription(desc)
+
+# %%
+# Build a collection of random vectors such that the distribution
+# of each is the push-forward of the posterior distribution of :math:`x_{diff}, x_{gb_saturation}, x_{crack}`
+# through one of the models.
+
+rv_normal_mixture = ot.RandomVector(normal_mixture)
+rv_models = [ot.CompositeRandomVector(model, rv_normal_mixture) for model in metamodels]
+
+# %%
+# Get a Monte-Carlo estimate of the median, 0.05 quantile and 0.95 quantile
+# of these push-forward distributions.
+
+predictions = [rv.getSample(100) for rv in rv_models]
+prediction_medians = [sam.computeMedian()[0] for sam in predictions]
+prediction_lb = [sam.computeQuantile(0.05)[0] for sam in predictions]
+prediction_ub = [sam.computeQuantile(0.95)[0] for sam in predictions]
+
+# %%
+# These push-forward distributions are the posterior distributions
+# of the model predictions.
+# We now represent their accuracy.
+
+yerr = np.abs(np.column_stack([prediction_lb, prediction_ub]).T - prediction_medians)
+plt.errorbar(fp.meas_v, prediction_medians, yerr, fmt="o")
+
+l = np.linspace(0, 0.5)
+plt.plot(l, l, "--")
+
+plt.xlabel("Measurements")
+plt.ylabel("Prediction ranges")
+
+plt.show()
+
+
+# %%
+ot.ResourceMap.Reload()
