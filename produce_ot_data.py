@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import openturns as ot
 import multiprocessing as mp
-import pickle
+import os
 
 # %%
 
@@ -17,10 +17,16 @@ fgr_data = data.fgr.dakota_data(train_test_split_kwargs=train_test_split_kwargs)
 fgr_data.process()
 
 # Training values
-Xtrain = ot.Sample.BuildFromDataFrame(fgr_data.Xtrain[["diff", "gb_saturation", "crack"]])
+Xtrain = ot.Sample.BuildFromDataFrame(
+    fgr_data.Xtrain[["diff", "gb_saturation", "crack"]]
+)
 ytrain = ot.Sample.BuildFromDataFrame(fgr_data.ytrain)
-Xtrain.exportToCSVFile("fuel_performance_Xtrain.csv")
-ytrain.exportToCSVFile("fuel_performance_ytrain.csv")
+Xtrain.exportToCSVFile(
+    os.path.join("fuel_performance_data", "fuel_performance_Xtrain.csv")
+)
+ytrain.exportToCSVFile(
+    os.path.join("fuel_performance_data", "fuel_performance_ytrain.csv")
+)
 
 
 # Testing values
@@ -43,9 +49,7 @@ covarianceModel.activateNuggetFactor(True)
 # Function returning the GP for exp = i
 def func(exp):
     # We do the algorithm
-    algo = ot.KrigingAlgorithm(
-        Xtrain, ytrain.getMarginal(exp), covarianceModel, basis
-    )
+    algo = ot.KrigingAlgorithm(Xtrain, ytrain.getMarginal(exp), covarianceModel, basis)
 
     # We run it
     algo.run()
@@ -62,7 +66,6 @@ with mp.Pool() as pool:
     metamodel_results = pool.map(func, range(31))
 
 metamodels = [res.getMetaModel() for res in metamodel_results]
-q2s = [ot.MetaMod]
 # %%
 q2 = ot.Sample(len(metamodel_results), 1)
 # Loop over all experiments
@@ -80,12 +83,16 @@ plt.plot(l, l, "--")
 plt.xlabel("Test predictions [-]")
 plt.ylabel("GP predictions [-]")
 
-        
+
 # %%
 template_kernel = ot.SquaredExponential(dimension)
-parameters = ot.Sample(ytrain.getDimension(), template_kernel.getFullParameter().getDimension())
+parameters = ot.Sample(
+    ytrain.getDimension(), template_kernel.getFullParameter().getDimension()
+)
 parameters.setDescription(template_kernel.getFullParameterDescription())
 for index, metamodel_result in enumerate(metamodel_results):
     parameters[index] = metamodel_result.getCovarianceModel().getFullParameter()
 print(parameters)
-parameters.exportToCSVFile("fuel_performance_GPR_hyperparameters.csv")
+parameters.exportToCSVFile(
+    os.path.join("fuel_performance_data", "fuel_performance_GPR_hyperparameters.csv")
+)
