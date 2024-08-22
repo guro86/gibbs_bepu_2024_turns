@@ -1,9 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Fri Aug  2 22:35:23 2024
-
-@author: robertgc
+Bayesian calibration of a hierarchical fuel performance model
+=============================================================
 """
 # %%
 import openturns as ot
@@ -12,10 +9,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # %%
-# Load the models
+# Set random seed
 
-from fuel_performance import FuelPerformance
-fp = FuelPerformance()
+ot.RandomGenerator.SetSeed(0)
+
+# %%
+# Load the models
+import os
+
+if "gibbs_bepu_2024_turns" in os.getcwd():
+    from fuel_performance import FuelPerformance
+    fp = FuelPerformance()
+else:
+    from openturns.usecases import fuel_performance
+    fp = fuel_performance.FuelPerformance()
 ndim = fp.Xtrain.getDimension() # dimension of the model inputs: 3
 desc = fp.Xtrain.getDescription() # description of the model inputs (diff, gb_saturation, crack)
 nexp = fp.ytrain.getDimension() # number of experiments (each has a specific model)
@@ -202,6 +209,9 @@ initial_mus = [10.0, 5.0, 0.3]
 initial_sigma_squares = [20.0 ** 2, 15.0 ** 2, 0.5 ** 2]
 initial_x = np.repeat([[19.0, 4.0, 0.4]], repeats=nexp, axis=0).flatten().tolist()
 initial_state = initial_mus + initial_sigma_squares + initial_x
+
+
+initial_state = [7.25437,5.34333,0.2688,16.0572,0.0400135,0.0272261,11.9245,5.37405,0.525344,5.73046,5.38231,0.0911716,9.63216,5.24496,0.374362,14.0424,5.75832,0.271396,9.87644,5.03691,0.162653,9.82311,5.39674,0.390882,8.00765,5.09337,0.16456,2.65465,5.69722,0.394443,2.5703,5.23133,0.426503,5.8409,5.17407,0.0137091,7.6153,5.28807,0.192897,6.22031,5.09896,0.170041,11.6519,4.92299,0.286779,3.35373,5.27964,0.334533,7.88469,5.57834,0.41805,2.37791,5.35143,0.224999,8.20026,5.54231,0.454754,9.27286,5.4026,0.126513,9.47674,5.26752,0.376011,7.66051,4.99955,0.240198,6.52532,5.35201,0.268828,8.92401,5.2735,0.6278,7.10376,5.37863,0.190223,9.51549,5.62299,0.22081,4.92388,5.45614,0.330533,5.33167,5.2495,0.165869,7.62818,5.45446,0.0581072,10.2911,5.17247,0.23252,14.6922,5.15172,0.731592,0.369771,4.72366,0.20958,11.0594,5.43281,0.063014]
 
 # %%
 # Support of the prior (and thus posterior) distribution

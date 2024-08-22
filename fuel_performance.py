@@ -5,17 +5,15 @@ import openturns as ot
 
 class FuelPerformance:
     def __init__(self) -> None:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         self.Xtrain = ot.Sample.ImportFromTextFile(
-            os.path.join("fuel_performance_data", "fuel_performance_Xtrain.csv"), ";"
+            os.path.join(current_dir, "fuel_performance_Xtrain.csv"), ";"
         )
         self.ytrain = ot.Sample.ImportFromTextFile(
-            os.path.join("fuel_performance_data", "fuel_performance_ytrain.csv"), ";"
+            os.path.join(current_dir, "fuel_performance_ytrain.csv"), ";"
         )
         self._hyperparameters = ot.Sample.ImportFromTextFile(
-            os.path.join(
-                "fuel_performance_data", "fuel_performance_GPR_hyperparameters.csv"
-            ),
-            ";",
+            os.path.join(current_dir, "fuel_performance_GPR_hyperparameters.csv"), ";"
         )
 
         self.models = []
