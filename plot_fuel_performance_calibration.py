@@ -24,27 +24,27 @@ else:
     from openturns.usecases import fuel_performance
     fp = fuel_performance.FuelPerformance()
 ndim = fp.Xtrain.getDimension() # dimension of the model inputs: 3
-desc = fp.Xtrain.getDescription() # description of the model inputs (diff, gb_saturation, crack)
+desc = fp.Xtrain.getDescription() # description of the model inputs (diff, gb\_satutation, crack)
 nexp = fp.ytrain.getDimension() # number of experiments (each has a specific model)
 models = fp.models # the nexp models
 
 # %%
 # Each experiment :math:`i` produced one measurement value,
 # which is used to define the likelihood of the associated model :math:`\mathcal{M}_i`
-# and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, gb_saturation}, x_{i, crack})`.
+# and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, gb\_satutation}, x_{i, crack})`.
 
 likes = fp.likes 
 
 # %%
 # Random vector to sample the conditional posterior
-# distribution of :math:`\vect{\mu} = (\mu_{diff}, \mu_{gb_saturation}, \mu_{crack})`
+# distribution of :math:`\vect{\mu} = (\mu_{diff}, \mu_{gb\_satutation}, \mu_{crack})`
 
 mu_rv = ot.RandomVector(ot.TruncatedNormal())
 mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
 
 # %%
 # Random vector to sample the conditional posterior
-# distribution of :math:`\vect{\sigma}^2 = (\sigma_{diff}^2, \sigma_{gb_saturation}^2, \sigma_{crack}^2)`
+# distribution of :math:`\vect{\sigma}^2 = (\sigma_{diff}^2, \sigma_{gb\_satutation}^2, \sigma_{crack}^2)`
 
 sigma_square_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
 sigma_square_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
@@ -143,7 +143,6 @@ class PosteriorParametersSigmaSquare(ot.OpenTURNSPythonFunction):
         return [post_lambda, post_k, self._lb, self._ub]
 
 
-# Create a logpdf for the latent parameters
 class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
     """Outputs the conditional posterior density (up to an additive constant)
     of the 3D latent variable x_i = (x_{i, diff}, x_{i, gb_saturation}, x_{i, crack})
@@ -194,14 +193,14 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
 
 
 # %%
-# Lower and upper bounds for :math:`\mu_{diff}, \mu_{gb_saturation}, \mu_{crack}`
+# Lower and upper bounds for :math:`\mu_{diff}, \mu_{gb\_satutation}, \mu_{crack}`
 lbs = [0.1, 0.1, 1e-4]
 ubs = [40.0, 10.0, 1.0]
 
 # %%
-# Lower and upper bounds for :math:`\sigma_{diff}^2, \sigma_{gb_saturation}^2, \sigma_{crack}^2`
-lbs_var = np.array([0.1, 0.1, 0.1]) ** 2
-ubs_var = np.array([40, 20, 10]) ** 2
+# Lower and upper bounds for :math:`\sigma_{diff}^2, \sigma_{gb\_satutation}^2, \sigma_{crack}^2`
+lbs_sigma_square = np.array([0.1, 0.1, 0.1]) ** 2
+ubs_sigma_square = np.array([40, 20, 10]) ** 2
 
 # %%
 # Initial state
@@ -216,7 +215,7 @@ initial_state = [7.25437,5.34333,0.2688,16.0572,0.0400135,0.0272261,11.9245,5.37
 # %%
 # Support of the prior (and thus posterior) distribution
 support = ot.Interval(
-    lbs + lbs_var.tolist() + nexp * lbs, ubs + ubs_var.tolist() + nexp * ubs
+    lbs + lbs_sigma_square.tolist() + nexp * lbs, ubs + ubs_sigma_square.tolist() + nexp * ubs
 )
 
 # %%
@@ -226,7 +225,7 @@ ot.ResourceMap.SetAsScalar("Distribution-QMax", 1.0)
 
 # %%
 # Create the list of all samplers in the Gibbs algorithm.
-# We start with the samplers of :math:`\mu_{diff}, \mu_{gb_saturation}, \mu_{crack}`.
+# We start with the samplers of :math:`\mu_{diff}, \mu_{gb\_satutation}, \mu_{crack}`.
 # We are able to directly sample these conditional distributions,
 # hence we use the :class:`~openturns.RandomVectorMetropolisHastings` class.
 
@@ -241,7 +240,7 @@ samplers = [
 ]
 
 # %%
-# We continue with the samplers of :math:`\sigma_{diff}^2, \sigma_{gb_saturation}^2, \sigma_{crack}^2`.
+# We continue with the samplers of :math:`\sigma_{diff}^2, \sigma_{gb\_satutation}^2, \sigma_{crack}^2`.
 # We are alse able to directly sample these conditional distributions.
 
 samplers += [
@@ -250,7 +249,7 @@ samplers += [
         initial_state,
         [ndim + i],
         ot.Function(
-            PosteriorParametersSigmaSquare(dim=i, lb=lbs_var[i], ub=ubs_var[i])
+            PosteriorParametersSigmaSquare(dim=i, lb=lbs_sigma_square[i], ub=ubs_sigma_square[i])
         ),
     )
     for i in range(ndim)
@@ -373,7 +372,7 @@ sigma_square = np.sqrt(samples.getMarginal(["$\\sigma$_{{{}}}^2".format(label) f
 
 
 # %%
-# Build the joint distribution of the latent variables :math:`x_{diff}, x_{gb_saturation}, x_{crack}`
+# Build the joint distribution of the latent variables :math:`x_{diff}, x_{gb\_satutation}, x_{crack}`
 # obtained when the :math:`\mu` and :math:`\sigma` parameters follow
 # their joint posterior distribution.
 # It is estimated as a mixture of normal distributions
@@ -385,7 +384,7 @@ normal_mixture.setDescription(desc)
 
 # %%
 # Build a collection of random vectors such that the distribution
-# of each is the push-forward of the marginal distribution of :math:`(x_{diff}, x_{gb_saturation}, x_{crack})`
+# of each is the push-forward of the marginal distribution of :math:`(x_{diff}, x_{gb\_satutation}, x_{crack})`
 # defined above through one of the nexp models.
 
 rv_normal_mixture = ot.RandomVector(normal_mixture)
