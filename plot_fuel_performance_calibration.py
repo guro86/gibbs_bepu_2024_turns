@@ -12,28 +12,43 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # %%
-# Load meta models, data, likelihoods
-from fuel_performance import FuelPerformance
+# Load the models
 
+from fuel_performance import FuelPerformance
 fp = FuelPerformance()
-ndim = fp.Xtrain.getDimension()
-desc = fp.Xtrain.getDescription()
-nexp = fp.ytrain.getDimension()
-metamodels = fp.models
-likes = fp.likes
+ndim = fp.Xtrain.getDimension() # dimension of the model inputs: 3
+desc = fp.Xtrain.getDescription() # description of the model inputs (diff, gb_saturation, crack)
+nexp = fp.ytrain.getDimension() # number of experiments (each has a specific model)
+models = fp.models # the nexp models
 
 # %%
-# Random vector for sampling of mu
+# Each experiment :math:`i` produced one measurement value,
+# which is used to define the likelihood of the associated model :math:`\mathcal{M}_i`
+# and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, gb_saturation}, x_{i, crack})`.
+
+likes = fp.likes 
+
+# %%
+# Random vector to sample the conditional posterior
+# distribution of :math:`\vect{\mu} = (\mu_{diff}, \mu_{gb_saturation}, \mu_{crack})`
+
 mu_rv = ot.RandomVector(ot.TruncatedNormal())
 mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
 
 # %%
-# Random vector for sampling of sigma
-var_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
-sigma_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
+# Random vector to sample the conditional posterior
+# distribution of :math:`\vect{\sigma}^2 = (\sigma_{diff}^2, \sigma_{gb_saturation}^2, \sigma_{crack}^2)`
+
+sigma_square_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
+sigma_square_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
 
 
 # %%
+# We define 3 function templates which produce:
+#
+# - the parameters of the conditional posterior distributions of the :math:`\mu` parameters
+# - the parameters of the conditional posterior distributions of the :math:`\sigma` parameters
+# - the conditional posterior log-PDF of the latent variables.
 
 class PosteriorParametersMu(ot.OpenTURNSPythonFunction):
     """Outputs the parameters of the conditional posterior distribution of one
@@ -124,7 +139,7 @@ class PosteriorParametersSigmaSquare(ot.OpenTURNSPythonFunction):
 # Create a logpdf for the latent parameters
 class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
     """Outputs the conditional posterior density (up to an additive constant)
-    of the 3D latent variable x_i = (x_i1, x_i2, x_i3)
+    of the 3D latent variable x_i = (x_{i, diff}, x_{i, gb_saturation}, x_{i, crack})
     corresponding to one experiment i.
 
     Parameters
@@ -149,7 +164,7 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
         # Setup experiment number and associated model and likelihood
         self._exp = exp
         self._like = likes[exp]
-        self._metamodel = metamodels[exp]
+        self._model = models[exp]
 
     def _exec(self, state):
         # Get the x indices of the experiment
@@ -163,8 +178,8 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
         # Compute the log-prior density
         logprior = np.sum([ot.DistFunc.logdNormal(normalized[i]) for i in range(ndim)])
 
-        # Use the metamodel to predict the experiment and compute the log-likelihood
-        pred = self._metamodel(x)
+        # Use the model to predict the experiment and compute the log-likelihood
+        pred = self._model(x)
         loglikelihood = self._like.computeLogPDF(pred)
 
         # Return the log-posterior, i.e. the sum of the log-prior and the log-likelihood
@@ -172,12 +187,12 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
 
 
 # %%
-# Lower and upper bounds for :math:`\mu_1, \mu_2, \mu_3`
+# Lower and upper bounds for :math:`\mu_{diff}, \mu_{gb_saturation}, \mu_{crack}`
 lbs = [0.1, 0.1, 1e-4]
 ubs = [40.0, 10.0, 1.0]
 
 # %%
-# Lower and upper bounds for :math:`\sigma_1^2, \sigma_2^2, \sigma_3^2`
+# Lower and upper bounds for :math:`\sigma_{diff}^2, \sigma_{gb_saturation}^2, \sigma_{crack}^2`
 lbs_var = np.array([0.1, 0.1, 0.1]) ** 2
 ubs_var = np.array([40, 20, 10]) ** 2
 
@@ -195,13 +210,13 @@ support = ot.Interval(
 )
 
 # %%
-# Remove restriction on the proposal probability of the origin
+# Remove the restriction on the proposal probability of the origin.
 ot.ResourceMap.SetAsScalar("Distribution-QMin", 0.0)
 ot.ResourceMap.SetAsScalar("Distribution-QMax", 1.0)
 
 # %%
 # Create the list of all samplers in the Gibbs algorithm.
-# We start with the samplers of :math:`\mu_1, \mu_2, \mu_3`.
+# We start with the samplers of :math:`\mu_{diff}, \mu_{gb_saturation}, \mu_{crack}`.
 # We are able to directly sample these conditional distributions,
 # hence we use the :class:`~openturns.RandomVectorMetropolisHastings` class.
 
@@ -216,12 +231,12 @@ samplers = [
 ]
 
 # %%
-# We continue with the samplers of :math:`\sigma_1^2, \sigma_2^2, \sigma_3^2`.
+# We continue with the samplers of :math:`\sigma_{diff}^2, \sigma_{gb_saturation}^2, \sigma_{crack}^2`.
 # We are alse able to directly sample these conditional distributions.
 
 samplers += [
     ot.RandomVectorMetropolisHastings(
-        var_rv,
+        sigma_square_rv,
         initial_state,
         [ndim + i],
         ot.Function(
@@ -233,7 +248,7 @@ samplers += [
 
 # %%
 # We finish with the samplers of the :math:`\vect{x}_i`, with :math:`1 \leq i \leq n_{exp}`.
-# Each of these samplers outputs points in a :math:`n_{dim}`-dimensional space.
+# Each of these samplers outputs points in a 3-dimensional space.
 # We are not able to directly sample these conditional posterior distributions,
 # so we resort to random walk Metropolis-Hastings.
 
@@ -261,7 +276,7 @@ sampler = ot.Gibbs(samplers)
 x_desc = []
 for i in range(1, nexp + 1):
     x_desc += ["x_{{{}, {}}}".format(label, i) for label in desc]
-sampler.setDescription(mu_desc + sigma_desc + x_desc)
+sampler.setDescription(mu_desc + sigma_square_desc + x_desc)
 
 # %%
 # Run this Metropolis-within-Gibbs algorithm and check the acceptance rates
@@ -298,7 +313,7 @@ for i in range(pair_plots.getNbRows()):
 _ = View(pair_plots)
        
 # %%
-# Create an enhanced pair plots grid with histograms on the diagonal.
+# Create an enhanced pair plots grid with histograms of the marginals on the diagonal.
 
 full_grid = ot.GridLayout(pair_plots.getNbRows() + 1, pair_plots.getNbColumns() + 1)
 
@@ -318,7 +333,7 @@ _ = View(full_grid)
 
 
 # %%
-# Finally superimpose contour plots of the 2D marginal PDFs on the pairplots.
+# Finally superimpose contour plots of the KDE-estimated 2D marginal PDFs on the pairplots.
 
 ot.ResourceMap.SetAsBool("Contour-DefaultIsFilled", True)
 ot.ResourceMap.SetAsString("Contour-DefaultColorMap", "viridis")
@@ -341,15 +356,18 @@ _ = View(full_grid, scatter_kw={"alpha": 0.2})
 
 
 # %%
-# Retrieve the :math:`\mu` and :math:`\sigma^2` columns in the sample.
+# Retrieve the :math:`\vect{\mu}` and :math:`\vect{\sigma}^2` columns in the sample.
 
 mu = samples.getMarginal(["$\\mu$_{{{}}}".format(label) for label in desc])
 sigma_square = np.sqrt(samples.getMarginal(["$\\sigma$_{{{}}}^2".format(label) for label in desc]))
 
 
 # %%
-# Build the posterior distribution of :math:`x_{diff}, x_{gb_saturation}, x_{crack}` as a mixture
-# by averaging out the :math:`\mu` and :math:`\sigma` parameters.
+# Build the joint distribution of the latent variables :math:`x_{diff}, x_{gb_saturation}, x_{crack}`
+# obtained when the :math:`\mu` and :math:`\sigma` parameters follow
+# their joint posterior distribution.
+# It is estimated as a mixture of normal distributions
+# corresponding to the posterior samples of the :math:`\mu` and :math:`\sigma` parameters.
 
 normal_collection = [ot.Normal(mean, std) for (mean, std) in zip(mu, sigma_square)]
 normal_mixture = ot.Mixture(normal_collection)
@@ -357,11 +375,11 @@ normal_mixture.setDescription(desc)
 
 # %%
 # Build a collection of random vectors such that the distribution
-# of each is the push-forward of the posterior distribution of :math:`x_{diff}, x_{gb_saturation}, x_{crack}`
-# through one of the models.
+# of each is the push-forward of the marginal distribution of :math:`(x_{diff}, x_{gb_saturation}, x_{crack})`
+# defined above through one of the nexp models.
 
 rv_normal_mixture = ot.RandomVector(normal_mixture)
-rv_models = [ot.CompositeRandomVector(model, rv_normal_mixture) for model in metamodels]
+rv_models = [ot.CompositeRandomVector(model, rv_normal_mixture) for model in models]
 
 # %%
 # Get a Monte-Carlo estimate of the median, 0.05 quantile and 0.95 quantile
@@ -373,9 +391,10 @@ prediction_lb = [sam.computeQuantile(0.05)[0] for sam in predictions]
 prediction_ub = [sam.computeQuantile(0.95)[0] for sam in predictions]
 
 # %%
-# These push-forward distributions are the posterior distributions
-# of the model predictions.
-# We now represent their accuracy.
+# These push-forward distributions are the distributions
+# of the model predictions when the :math:`\mu` and :math:`\sigma` parameters follow
+# their joint posterior distribution.
+# They can be compared to the actual measurements to represent predictive accuracy.
 
 yerr = np.abs(np.column_stack([prediction_lb, prediction_ub]).T - prediction_medians)
 plt.errorbar(fp.meas_v, prediction_medians, yerr, fmt="o")
