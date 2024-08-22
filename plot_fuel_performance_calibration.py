@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 ot.RandomGenerator.SetSeed(0)
 
-ot.ResourceMap.SetAsUnsignedInteger("RandomWalkMetropolisHastings-DefaultBurnIn", 10000)
+#ot.ResourceMap.SetAsUnsignedInteger("RandomWalkMetropolisHastings-DefaultBurnIn", 10000)
 
 # %%
 # Load the models
@@ -26,27 +26,27 @@ else:
     from openturns.usecases import fuel_performance
     fp = fuel_performance.FuelPerformance()
 ndim = fp.Xtrain.getDimension() # dimension of the model inputs: 3
-desc = fp.Xtrain.getDescription() # description of the model inputs (diff, gb\_satutation, crack)
+desc = fp.Xtrain.getDescription() # description of the model inputs (diff, crack)
 nexp = fp.ytrain.getDimension() # number of experiments (each has a specific model)
 models = fp.models # the nexp models
 
 # %%
 # Each experiment :math:`i` produced one measurement value,
 # which is used to define the likelihood of the associated model :math:`\mathcal{M}_i`
-# and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, gb\_satutation}, x_{i, crack})`.
+# and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, crack})`.
 
 likes = fp.likes 
 
 # %%
 # Random vector to sample the conditional posterior
-# distribution of :math:`\vect{\mu} = (\mu_{diff}, \mu_{gb\_satutation}, \mu_{crack})`
+# distribution of :math:`\vect{\mu} = (\mu_{diff}, \mu_{crack})`
 
 mu_rv = ot.RandomVector(ot.TruncatedNormal())
 mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
 
 # %%
 # Random vector to sample the conditional posterior
-# distribution of :math:`\vect{\sigma}^2 = (\sigma_{diff}^2, \sigma_{gb\_satutation}^2, \sigma_{crack}^2)`
+# distribution of :math:`\vect{\sigma}^2 = (\sigma_{diff}^2, \sigma_{crack}^2)`
 
 sigma_square_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
 sigma_square_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
@@ -141,25 +141,25 @@ class PosteriorParametersSigmaSquare(ot.OpenTURNSPythonFunction):
         post_lambda = 2.0 / np.sum(squares)  # rate lambda =  1 / beta
         post_k = nexp / 2.0  # shape
 
-        print("dim = ", self._dim)
-        print([post_lambda, post_k, self._lb, self._ub])
-        print("empirical standard deviation = ",  np.sqrt(np.mean(squares)))
-        trinvgamma = ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0)
-        try:
-            trinvgamma.setParameter([post_lambda, post_k, self._lb, self._ub])
-        except:
-            print("DID NOT WORK")
-            print([post_lambda, post_k, self._lb, self._ub])
-            invgamma = ot.InverseGamma(post_lambda, post_k)
-            print(invgamma.computeCDF(float(self._lb)))
-            print(invgamma.computeCDF(float(self._ub)))
+        # print("dim = ", self._dim)
+        # print([post_lambda, post_k, self._lb, self._ub])
+        # print("empirical standard deviation = ",  np.sqrt(np.mean(squares)))
+        # trinvgamma = ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0)
+        # try:
+        #     trinvgamma.setParameter([post_lambda, post_k, self._lb, self._ub])
+        # except:
+        #     print("DID NOT WORK")
+        #     print([post_lambda, post_k, self._lb, self._ub])
+        #     invgamma = ot.InverseGamma(post_lambda, post_k)
+        #     print(invgamma.computeCDF(float(self._lb)))
+        #     print(invgamma.computeCDF(float(self._ub)))
         # Hyperparameters of a truncated inverse gamma
         return [post_lambda, post_k, self._lb, self._ub]
 
 
 class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
     """Outputs the conditional posterior density (up to an additive constant)
-    of the 3D latent variable x_i = (x_{i, diff}, x_{i, gb_saturation}, x_{i, crack})
+    of the 2D latent variable x_i = (x_{i, diff}, x_{i, x_{i, crack})
     corresponding to one experiment i.
 
     Parameters
@@ -207,24 +207,24 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
 
 
 # %%
-# Lower and upper bounds for :math:`\mu_{diff}, \mu_{gb\_satutation}, \mu_{crack}`
-lbs = [0.1, 0.1, 1e-4]
-ubs = [40.0, 10.0, 1.0]
+# Lower and upper bounds for :math:`\mu_{diff}, \mu_{crack}`
+lbs = [0.1, 1e-4]
+ubs = [40.0, 1.0]
 
 # %%
-# Lower and upper bounds for :math:`\sigma_{diff}^2, \sigma_{gb\_satutation}^2, \sigma_{crack}^2`
-lbs_sigma_square = np.array([0.1, 0.00001, 0.1]) ** 2
-ubs_sigma_square = np.array([40, 20, 10]) ** 2
+# Lower and upper bounds for :math:`\sigma_{diff}^2, \sigma_{crack}^2`
+lbs_sigma_square = np.array([0.1, 0.1]) ** 2
+ubs_sigma_square = np.array([40, 10]) ** 2
 
 # %%
 # Initial state
-initial_mus = [10.0, 5.0, 0.3]
-initial_sigma_squares = [20.0 ** 2, 15.0 ** 2, 0.5 ** 2]
-initial_x = np.repeat([[19.0, 4.0, 0.4]], repeats=nexp, axis=0).flatten().tolist()
+initial_mus = [10.0, 0.3]
+initial_sigma_squares = [20.0 ** 2, 0.5 ** 2]
+initial_x = np.repeat([[19.0, 0.4]], repeats=nexp, axis=0).flatten().tolist()
 initial_state = initial_mus + initial_sigma_squares + initial_x
 
 
-initial_state = [7.51188,8.51937,0.292952,9.37161,0.0516549,0.0290076,9.08868,8.45879,0.48073,6.34297,8.5543,0.150879,7.93481,8.65959,0.519287,4.31882,8.39354,0.525883,6.85787,8.70104,0.189518,7.52134,9.01983,0.422947,9.55284,8.76941,0.125033,6.16268,8.03187,0.165988,6.23355,8.53377,0.427718,1.34126,8.12576,0.463676,6.8223,8.25217,0.215145,4.32857,8.48588,0.235282,4.16995,8.64144,0.439799,12.6397,8.79266,0.493053,7.17511,9.2374,0.432577,6.79614,8.72714,0.184218,9.13748,8.19622,0.476752,4.74385,8.38604,0.189267,6.50082,8.48837,0.356241,10.7832,8.43997,0.251964,10.0711,7.98261,0.200379,16.7423,8.86075,0.527558,9.69518,8.77775,0.166641,8.56429,8.69221,0.199346,15.5955,8.38788,0.272872,10.2809,8.48477,0.132925,10.5913,8.3798,0.0507148,8.156,8.56329,0.237119,7.92834,8.12394,0.536364,1.47742,8.88654,0.161173,4.48622,8.71523,0.230233]
+#initial_state = [7.51188,8.51937,0.292952,9.37161,0.0516549,0.0290076,9.08868,8.45879,0.48073,6.34297,8.5543,0.150879,7.93481,8.65959,0.519287,4.31882,8.39354,0.525883,6.85787,8.70104,0.189518,7.52134,9.01983,0.422947,9.55284,8.76941,0.125033,6.16268,8.03187,0.165988,6.23355,8.53377,0.427718,1.34126,8.12576,0.463676,6.8223,8.25217,0.215145,4.32857,8.48588,0.235282,4.16995,8.64144,0.439799,12.6397,8.79266,0.493053,7.17511,9.2374,0.432577,6.79614,8.72714,0.184218,9.13748,8.19622,0.476752,4.74385,8.38604,0.189267,6.50082,8.48837,0.356241,10.7832,8.43997,0.251964,10.0711,7.98261,0.200379,16.7423,8.86075,0.527558,9.69518,8.77775,0.166641,8.56429,8.69221,0.199346,15.5955,8.38788,0.272872,10.2809,8.48477,0.132925,10.5913,8.3798,0.0507148,8.156,8.56329,0.237119,7.92834,8.12394,0.536364,1.47742,8.88654,0.161173,4.48622,8.71523,0.230233]
 
 # %%
 # Support of the prior (and thus posterior) distribution
@@ -239,7 +239,7 @@ ot.ResourceMap.SetAsScalar("Distribution-QMax", 1.0)
 
 # %%
 # Create the list of all samplers in the Gibbs algorithm.
-# We start with the samplers of :math:`\mu_{diff}, \mu_{gb\_satutation}, \mu_{crack}`.
+# We start with the samplers of :math:`\mu_{diff}, \mu_{crack}`.
 # We are able to directly sample these conditional distributions,
 # hence we use the :class:`~openturns.RandomVectorMetropolisHastings` class.
 
@@ -254,7 +254,7 @@ samplers = [
 ]
 
 # %%
-# We continue with the samplers of :math:`\sigma_{diff}^2, \sigma_{gb\_satutation}^2, \sigma_{crack}^2`.
+# We continue with the samplers of :math:`\sigma_{diff}^2, \sigma_{crack}^2`.
 # We are alse able to directly sample these conditional distributions.
 
 samplers += [
@@ -283,7 +283,7 @@ for exp in range(nexp):
             ot.Function(PosteriorLogDensityX(exp=exp)),
             support,
             initial_state,
-            ot.Normal([0.0] * 3, [6.0, 0.5, 0.15]),
+            ot.Normal([0.0] * 2, [6.0, 0.15]),
             [base_index + i for i in range(ndim)],
         )
     ]
@@ -305,7 +305,7 @@ sampler.setDescription(mu_desc + sigma_square_desc + x_desc)
 # Run this Metropolis-within-Gibbs algorithm and check the acceptance rates
 # for the Random walk Metropolis-Hastings samplers.
 
-samples = sampler.getSample(20000)
+samples = sampler.getSample(2000)
 acceptance = [
     sampler.getMetropolisHastingsCollection()[i].getAcceptanceRate()
     for i in range(6, len(samplers))
@@ -325,7 +325,7 @@ print("Maximum acceptance rate for random walk MH = ", np.max(acceptance[2 * ndi
 
 #reduced_samples = samples[samples.getSize()*3//4::20, 0:6]
 #reduced_samples = samples[0::100, 0:6]
-reduced_samples = samples[:, 0:6]
+reduced_samples = samples[:, 0:4]
 
 # %%
 # It is possible to quickly draw pair plots.
@@ -381,7 +381,7 @@ for i in range(1, full_grid.getNbRows()):
         graph.setBoundingBox(contour.getBoundingBox())
         full_grid.setGraph(i, j, graph)
 
-_ = View(full_grid, scatter_kw={"alpha": 0.2})
+_ = View(full_grid, scatter_kw={"alpha": 0.1})
 
 
 # %%
@@ -392,19 +392,20 @@ sigma_square = np.sqrt(samples.getMarginal(["$\\sigma$_{{{}}}^2".format(label) f
 
 
 # %%
-# Build the joint distribution of the latent variables :math:`x_{diff}, x_{gb\_satutation}, x_{crack}`
+# Build the joint distribution of the latent variables :math:`x_{diff}, x_{crack}`
 # obtained when the :math:`\mu` and :math:`\sigma` parameters follow
 # their joint posterior distribution.
-# It is estimated as a mixture of normal distributions
+# It is estimated as a mixture of truncated normal distributions
 # corresponding to the posterior samples of the :math:`\mu` and :math:`\sigma` parameters.
 
-normal_collection = [ot.Normal(mean, std) for (mean, std) in zip(mu, sigma_square)]
+truncation_interval = ot.Interval(lbs, ubs)
+normal_collection = [ot.TruncatedDistribution(ot.Normal(mean, std), truncation_interval) for (mean, std) in zip(mu, sigma_square)]
 normal_mixture = ot.Mixture(normal_collection)
 normal_mixture.setDescription(desc)
 
 # %%
 # Build a collection of random vectors such that the distribution
-# of each is the push-forward of the marginal distribution of :math:`(x_{diff}, x_{gb\_satutation}, x_{crack})`
+# of each is the push-forward of the marginal distribution of :math:`(x_{diff}, x_{crack})`
 # defined above through one of the nexp models.
 
 rv_normal_mixture = ot.RandomVector(normal_mixture)

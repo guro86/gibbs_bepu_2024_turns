@@ -18,7 +18,7 @@ fgr_data.process()
 
 # Training values
 Xtrain = ot.Sample.BuildFromDataFrame(
-    fgr_data.Xtrain[["diff", "gb_saturation", "crack"]]
+    fgr_data.Xtrain[["diff", "crack"]]
 )
 ytrain = ot.Sample.BuildFromDataFrame(fgr_data.ytrain)
 Xtrain.exportToCSVFile(
@@ -30,7 +30,7 @@ ytrain.exportToCSVFile(
 
 
 # Testing values
-Xtest = ot.Sample.BuildFromDataFrame(fgr_data.Xtest[["diff", "gb_saturation", "crack"]])
+Xtest = ot.Sample.BuildFromDataFrame(fgr_data.Xtest[["diff", "crack"]])
 ytest = ot.Sample.BuildFromDataFrame(fgr_data.ytest)
 
 
