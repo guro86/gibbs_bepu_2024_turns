@@ -398,6 +398,7 @@ prediction_ub = [sam.computeQuantile(0.95)[0] for sam in predictions]
 
 yerr = np.abs(np.column_stack([prediction_lb, prediction_ub]).T - prediction_medians)
 plt.errorbar(fp.meas_v, prediction_medians, yerr, fmt="o")
+plt.xscale("log")
 
 l = np.linspace(0, 0.5)
 plt.plot(l, l, "--")

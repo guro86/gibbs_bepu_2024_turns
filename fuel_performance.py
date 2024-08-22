@@ -1,15 +1,21 @@
 # %%
-
+import os
 import openturns as ot
-
 
 
 class FuelPerformance:
     def __init__(self) -> None:
-        self.Xtrain = ot.Sample.ImportFromTextFile("fuel_performance_Xtrain.csv", ";")
-        self.ytrain = ot.Sample.ImportFromTextFile("fuel_performance_ytrain.csv", ";")
+        self.Xtrain = ot.Sample.ImportFromTextFile(
+            os.path.join("fuel_performance_data", "fuel_performance_Xtrain.csv"), ";"
+        )
+        self.ytrain = ot.Sample.ImportFromTextFile(
+            os.path.join("fuel_performance_data", "fuel_performance_ytrain.csv"), ";"
+        )
         self._hyperparameters = ot.Sample.ImportFromTextFile(
-            "gpr_hyperparameters.csv", ";"
+            os.path.join(
+                "fuel_performance_data", "fuel_performance_GPR_hyperparameters.csv"
+            ),
+            ";",
         )
 
         self.models = []
@@ -63,5 +69,3 @@ class FuelPerformance:
 
         # Defining some likelihoods
         self.likes = [ot.Normal(v, meas_unc(v)) for v in self.meas_v]
-
-
