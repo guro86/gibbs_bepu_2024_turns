@@ -1,19 +1,21 @@
 """
-Bayesian calibration of a hierarchical fuel performance model
-=============================================================
+Bayesian calibration of hierarchical fission gas release models
+===============================================================
 """
 # %%
+# Introduction
+# ------------
+#
+# In this example, we follow the procedure described in [robertson2024]_
+# to calibrate fission gas release models.
+# Please note that we are using simplified models, so the results of this page
+# should not be expected to reproduce those of the paper.
+# The simplified models are presented in the page :ref:`use-case-fission-gas`.
+
 import openturns as ot
 from openturns.viewer import View
 import numpy as np
 import matplotlib.pyplot as plt
-
-# %%
-# Set random seed
-
-ot.RandomGenerator.SetSeed(0)
-
-# ot.ResourceMap.SetAsUnsignedInteger("RandomWalkMetropolisHastings-DefaultBurnIn", 10000)
 
 # %%
 # Load the models
@@ -28,8 +30,10 @@ else:
 
     fgr = fission_gas.FissionGasRelease()
 desc = fgr.get_input_description()  # description of the model inputs (diff, crack)
-ndim = len(desc) # dimension of the model inputs: 2
-nexp = fgr.measurement_values.getSize() # number of experiments (each has a specific model)
+ndim = len(desc)  # dimension of the model inputs: 2
+nexp = (
+    fgr.measurement_values.getSize()
+)  # number of experiments (each has a specific model)
 models = fgr.models  # the nexp models
 
 # %%
@@ -37,7 +41,9 @@ models = fgr.models  # the nexp models
 # which is used to define the likelihood of the associated model :math:`\mathcal{\model}_i`
 # and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, crack})`.
 
-likelihoods = [ot.Normal(v, fgr.measurement_uncertainty(v)) for v in fgr.measurement_values]
+likelihoods = [
+    ot.Normal(v, fgr.measurement_uncertainty(v)) for v in fgr.measurement_values
+]
 
 # %%
 # The unobserved model inputs :math:`x_{\mathrm{diff}, i}, i=1...\sampleSize_{\mathrm{exp}}`
@@ -46,11 +52,11 @@ likelihoods = [ot.Normal(v, fgr.measurement_uncertainty(v)) for v in fgr.measure
 # mean parameter :math:`\mu_{\mathrm{diff}}` (resp. :math:`\mu_{\mathrm{crack}}`)
 # and standard deviation parameter :math:`\sigma_{\mathrm{diff}}` (resp. :math:`\sigma_{\mathrm{crack}}`).
 #
-# The network plot from the page :ref:`fission_gas` can thus be updated:
+# The network plot from the page :ref:`use-case-fission-gas` can thus be updated:
 #
 # .. figure:: ../../../../_static/fission_gas_network_calibration.png
 #     :align: center
-#     :alt: use case geometry
+#     :alt: Fission gas release calibration
 #     :width: 50%
 #
 # In the network above, full arrows represent deterministic relationships and dashed arrows probabilistic relationships.
@@ -58,12 +64,15 @@ likelihoods = [ot.Normal(v, fgr.measurement_uncertainty(v)) for v in fgr.measure
 # is a normal distribution with parameters equal to these starting nodes.
 #
 # The goal of this study is to calibrate the parameters :math:`\mu_{\mathrm{diff}}`, :math:`\sigma_{\mathrm{diff}}`,
-# resp. :math:`\mu_{\mathrm{crack}}` and :math:`\sigma_{\mathrm{crack}}`.
-# To perform Bayesian calibration, we set a uniform prior distribution on :math:`\mu_{\mathrm{diff}}` and :math:`\mu_{\mathrm{crack}}`
-# and the limit of a truncated inverse gamma distribution with parameters :math:`(\lambda, k)` when :math:`\lambda \to \infty` and :math:`k \to 0`.
+# :math:`\mu_{\mathrm{crack}}` and :math:`\sigma_{\mathrm{crack}}`.
+# To perform Bayesian calibration, we set for :math:`\mu_{\mathrm{diff}}` and :math:`\mu_{\mathrm{crack}}` a uniform prior distribution
+# and for :math:`\sigma_{\mathrm{diff}}` and :math:`\sigma_{\mathrm{crack}}` the limit of a truncated inverse gamma distribution with parameters :math:`(\lambda, k)` when :math:`\lambda \to \infty` and :math:`k \to 0`.
 # The parameters of the prior distributions are defined later.
 
 # %%
+# Partially conjugate posterior
+# -----------------------------
+#
 # This choice of prior distributions means that the posterior is partially conjugate.
 # For instance, the conditional posterior distribution of :math:`\mu_{\mathrm{diff}}`
 # (resp. :math:`\mu_{\mathrm{crack}}`)
@@ -74,7 +83,7 @@ likelihoods = [ot.Normal(v, fgr.measurement_uncertainty(v)) for v in fgr.measure
 # - The standard deviation parameter is :math:`\sqrt{\frac{\sigma_{\mathrm{diff}}}{\sampleSize_{\mathrm{exp}}}}`.
 #
 # Let us prepare a random vector to sample the conditional posterior
-# distributions of :math:`\mu_{diff}` and :math:`\mu_{crack}`.
+# distributions of :math:`\mu_{\mathrm{diff}}` and :math:`\mu_{\mathrm{crack}}`.
 
 mu_rv = ot.RandomVector(ot.TruncatedNormal())
 mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
@@ -89,7 +98,7 @@ mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
 # - The :math:`k` parameter is :math:`\sqrt{\frac{\sampleSize_{\mathrm{exp}}}{2}}`.
 #
 # Let us prepare a random vector to sample the conditional posterior
-# distribution of :math:`\sigma_{diff}^2` and :math:`\sigma_{crack}^2`.
+# distribution of :math:`\sigma_{\mathrm{diff}}^2` and :math:`\sigma_{\mathrm{crack}}^2`.
 
 sigma_square_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
 sigma_square_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
@@ -98,8 +107,8 @@ sigma_square_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
 # %%
 # We define 3 function templates which produce:
 #
-# - the parameters of the conditional posterior distributions of the :math:`\mu` parameters
-# - the parameters of the conditional posterior distributions of the :math:`\sigma` parameters
+# - the parameters of the (truncated normal) conditional posterior distributions of the :math:`\mu` parameters
+# - the parameters of the (truncated inverse gamma) conditional posterior distributions of the :math:`\sigma` parameters
 # - the conditional posterior log-PDF of the latent variables.
 
 
@@ -122,7 +131,6 @@ class PosteriorParametersMu(ot.OpenTURNSPythonFunction):
     """
 
     def __init__(self, dim=0, lb=-100, ub=100):
-        # Get dimension and total number of dimensions
         self._dim = dim
 
         # state description: mu values, then sigma values, then for each experiment x values
@@ -164,7 +172,6 @@ class PosteriorParametersSigmaSquare(ot.OpenTURNSPythonFunction):
     """
 
     def __init__(self, dim=0, lb=1e-4, ub=100):
-        # Get dimension and total number of dimensions
         self._dim = dim
 
         # State description: mu values, then sigma values, then for each experiment x values
@@ -238,12 +245,15 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
 
 
 # %%
-# Lower and upper bounds for :math:`\mu_{diff}, \mu_{crack}`
+# Metropolis-within-Gibbs algorithm
+# ---------------------------------
+#
+# Lower and upper bounds for :math:`\mu_{\mathrm{diff}}, \mu_{\mathrm{crack}}`
 lbs = [0.1, 1e-4]
 ubs = [40.0, 1.0]
 
 # %%
-# Lower and upper bounds for :math:`\sigma_{diff}^2, \sigma_{crack}^2`
+# Lower and upper bounds for :math:`\sigma_{\mathrm{diff}}^2, \sigma_{\mathrm{crack}}^2`
 lbs_sigma_square = np.array([0.1, 0.1]) ** 2
 ubs_sigma_square = np.array([40, 10]) ** 2
 
@@ -268,7 +278,7 @@ ot.ResourceMap.SetAsScalar("Distribution-QMax", 1.0)
 
 # %%
 # Create the list of all samplers in the Gibbs algorithm.
-# We start with the samplers of :math:`\mu_{diff}, \mu_{crack}`.
+# We start with the samplers of :math:`\mu_{\mathrm{diff}}, \mu_{\mathrm{crack}}`.
 # We are able to directly sample these conditional distributions,
 # hence we use the :class:`~openturns.RandomVectorMetropolisHastings` class.
 
@@ -283,7 +293,7 @@ samplers = [
 ]
 
 # %%
-# We continue with the samplers of :math:`\sigma_{diff}^2, \sigma_{crack}^2`.
+# We continue with the samplers of :math:`\sigma_{\mathrm{diff}}^2, \sigma_{\mathrm{crack}}^2`.
 # We are alse able to directly sample these conditional distributions.
 
 samplers += [
@@ -349,8 +359,10 @@ print("Minimum acceptance rate = ", np.min(acceptance))
 print("Maximum acceptance rate for random walk MH = ", np.max(acceptance[2 * ndim :]))
 
 # %%
-# Represent the last sampled points (i.e. those which are least dependent on the initial state)
-# We are only interested in the :math:`\mu` and :math:`\sigma` parameters.
+# Plot the posterior distribution
+# -------------------------------
+#
+# Represent only the :math:`\mu` and :math:`\sigma` parameters.
 
 reduced_samples = samples[:, 0:4]
 
@@ -395,7 +407,7 @@ _ = View(full_grid)
 ot.ResourceMap.SetAsBool("Contour-DefaultIsFilled", True)
 ot.ResourceMap.SetAsString("Contour-DefaultColorMap", "viridis")
 
-# sphinx_gallery_thumbnail_number = 3 
+# sphinx_gallery_thumbnail_number = 3
 for i in range(1, full_grid.getNbRows()):
     for j in range(i):
         graph = full_grid.getGraph(i, j)
@@ -413,34 +425,37 @@ _ = View(full_grid, scatter_kw={"alpha": 0.1})
 
 
 # %%
+# Post-calibration prediction
+# ---------------------------
+#
 # Retrieve the :math:`\mu` and :math:`\sigma^2` columns in the sample.
 
 mu = samples.getMarginal(["$\\mu$_{{{}}}".format(label) for label in desc])
-sigma_square = np.sqrt(
-    samples.getMarginal(["$\\sigma$_{{{}}}^2".format(label) for label in desc])
+sigma_square = samples.getMarginal(
+    ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
 )
 
 
 # %%
-# Build the joint distribution of the latent variables :math:`x_{diff}, x_{crack}`
+# Build the joint distribution of the latent variables :math:`x_{\mathrm{diff}}, x_{\mathrm{crack}}`
 # obtained when :math:`\mu_{\mathrm{diff}}`, :math:`\sigma_{\mathrm{diff}}`,
-# :math:`\mu_{\mathrm{crack}}` and :math:`\sigma_{\mathrm{crack}}` 
+# :math:`\mu_{\mathrm{crack}}` and :math:`\sigma_{\mathrm{crack}}`
 # follow their joint posterior distribution.
 # It is estimated as a mixture of truncated :math:`\sampleSize_{\mathrm{exp}}`-dimensional normal distributions
-# corresponding to the posterior samples of the :math:`\mu_{\mathrm{diff}}`, :math:`\mu_{\mathrm{crack}}`, 
+# corresponding to the posterior samples of the :math:`\mu_{\mathrm{diff}}`, :math:`\mu_{\mathrm{crack}}`,
 # :math:`\sigma_{\mathrm{diff}}` and :math:`\sigma_{\mathrm{crack}}` parameters.
 
 truncation_interval = ot.Interval(lbs, ubs)
 normal_collection = [
-    ot.TruncatedDistribution(ot.Normal(mean, std), truncation_interval)
-    for (mean, std) in zip(mu, sigma_square)
+    ot.TruncatedDistribution(ot.Normal(mean, np.sqrt(var)), truncation_interval)
+    for (mean, var) in zip(mu, sigma_square)
 ]
 normal_mixture = ot.Mixture(normal_collection)
 normal_mixture.setDescription(desc)
 
 # %%
 # Build a collection of random vectors such that the distribution
-# of each is the push-forward of the marginal distribution of :math:`(x_{diff}, x_{crack})`
+# of each is the push-forward of the marginal distribution of :math:`(x_{\mathrm{diff}}, x_{\mathrm{crack}})`
 # defined above through one of the nexp models.
 
 rv_normal_mixture = ot.RandomVector(normal_mixture)
@@ -457,7 +472,7 @@ prediction_ub = [sam.computeQuantile(0.95)[0] for sam in predictions]
 
 # %%
 # These push-forward distributions are the distributions
-# of the model predictions when :math:`\mu_{\mathrm{diff}}`, :math:`\mu_{\mathrm{crack}}`, 
+# of the model predictions when :math:`\mu_{\mathrm{diff}}`, :math:`\mu_{\mathrm{crack}}`,
 # :math:`\sigma_{\mathrm{diff}}` and :math:`\sigma_{\mathrm{crack}}` follow
 # their joint posterior distribution.
 # They can be compared to the actual measurements to represent predictive accuracy.
@@ -467,13 +482,84 @@ plt.errorbar(fgr.measurement_values, prediction_medians, yerr, fmt="o")
 plt.xscale("log")
 
 l = np.linspace(0, 0.5)
-plt.plot(l, l, "--")
+plt.plot(l, l, "--", color="black")
 
 plt.xlabel("Measurements")
-plt.ylabel("Prediction ranges")
+plt.ylabel("Prediction ranges induced by the posterior")
 
 plt.show()
 
+# %%
+# For the sake of comparison, we now consider the distributions
+# of the model predictions when :math:`\mu_{\mathrm{diff}}`, :math:`\mu_{\mathrm{crack}}`,
+# :math:`\sigma_{\mathrm{diff}}` and :math:`\sigma_{\mathrm{crack}}` follow
+# their joint prior distribution.
+# Because the actual prior distribution of :math:`\sigma_{\mathrm{diff}}` and :math:`\sigma_{\mathrm{crack}}`
+# cannot be represented, we approximate them by choosing a very large :math:`\lambda` parameter
+# and a very small :math:`k` parameter.
+
+prior = ot.JointDistribution(
+    [
+        ot.Uniform(lbs[0], ubs[0]),
+        ot.Uniform(lbs[1], ubs[1]),
+        ot.TruncatedDistribution(
+            ot.InverseGamma(10000000, 0.01),
+            lbs_sigma_square[0],
+            float(ubs_sigma_square[0]),
+        ),
+        ot.TruncatedDistribution(
+            ot.InverseGamma(10000000, 0.01),
+            lbs_sigma_square[1],
+            float(ubs_sigma_square[1]),
+        ),
+    ]
+)
+prior_sample = prior.getSample(2000)
+
+# As before, build a mixture of truncated normal distributions from the sample.
+normal_collection_prior = [
+    ot.TruncatedDistribution(ot.Normal(par[0:2], np.sqrt(par[2:])), truncation_interval)
+    for par in prior_sample
+]
+normal_mixture_prior = ot.Mixture(normal_collection_prior)
+normal_mixture_prior.setDescription(desc)
+rv_normal_mixture_prior = ot.RandomVector(normal_mixture_prior)
+
+# Build random vectors sampling from the predictive distributions.
+rv_models_prior = [
+    ot.CompositeRandomVector(model, rv_normal_mixture_prior) for model in models
+]
+
+predictions_prior = [rv.getSample(100) for rv in rv_models_prior]
+prediction_medians_prior = [sam.computeMedian()[0] for sam in predictions_prior]
+prediction_lb_prior = [sam.computeQuantile(0.05)[0] for sam in predictions_prior]
+prediction_ub_prior = [sam.computeQuantile(0.95)[0] for sam in predictions_prior]
+
+# Produce the graph comparing predictive distributions with measurements
+yerr_prior = np.abs(
+    np.column_stack([prediction_lb_prior, prediction_ub_prior]).T
+    - prediction_medians_prior
+)
+plt.errorbar(
+    np.array(fgr.measurement_values), prediction_medians_prior, yerr_prior, fmt="o"
+)
+plt.xscale("log")
+plt.plot(l, l, "--", color="black")
+plt.xlabel("Measurements")
+plt.ylabel("Prediction ranges induced by the prior")
+plt.show()
+# %%
+# To facilitate the comparison, we plot the median value of the predictive distributions only.
+
+plt.scatter(fgr.measurement_values, prediction_medians)
+plt.scatter(fgr.measurement_values, prediction_medians_prior)
+plt.xscale("log")
+plt.plot(l, l, "--", c="black")
+plt.xlabel("Measurements")
+plt.ylabel("Prediction medians")
+plt.legend(["Posterior", "Prior"])
+plt.show()
 
 # %%
+
 ot.ResourceMap.Reload()

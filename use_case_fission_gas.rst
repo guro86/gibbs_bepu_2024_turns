@@ -37,7 +37,7 @@ while dashed arrows represent probabilistic relationships (e.g. a normal distrib
 
 .. figure:: ../_static/fission_gas_network.png
     :align: center
-    :alt: use case geometry
+    :alt: Relationships between the variables
     :width: 50%
 
 References
