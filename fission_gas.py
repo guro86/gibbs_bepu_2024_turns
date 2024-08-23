@@ -21,8 +21,8 @@ class FissionGasRelease:
 
     Examples
     --------
-    Load the fission gas release models.
     >>> from openturns.usecases import fission_gas
+    >>> # Load the fission gas release models
     >>> fgr = fission_gas.FissionGasRelease()
     """
     def __init__(self) -> None:
