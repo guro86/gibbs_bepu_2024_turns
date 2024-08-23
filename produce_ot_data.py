@@ -21,12 +21,8 @@ Xtrain = ot.Sample.BuildFromDataFrame(
     fgr_data.Xtrain[["diff", "crack"]]
 )
 ytrain = ot.Sample.BuildFromDataFrame(fgr_data.ytrain)
-Xtrain.exportToCSVFile(
-    os.path.join("fuel_performance_data", "fuel_performance_Xtrain.csv")
-)
-ytrain.exportToCSVFile(
-    os.path.join("fuel_performance_data", "fuel_performance_ytrain.csv")
-)
+Xtrain.exportToCSVFile("fission_gas_Xtrain.csv")
+ytrain.exportToCSVFile("fission_gas_ytrain.csv")
 
 
 # Testing values
@@ -93,6 +89,4 @@ parameters.setDescription(template_kernel.getFullParameterDescription())
 for index, metamodel_result in enumerate(metamodel_results):
     parameters[index] = metamodel_result.getCovarianceModel().getFullParameter()
 print(parameters)
-parameters.exportToCSVFile(
-    os.path.join("fuel_performance_data", "fuel_performance_GPR_hyperparameters.csv")
-)
+parameters.exportToCSVFile("fission_gas_GPR_hyperparameters.csv")
