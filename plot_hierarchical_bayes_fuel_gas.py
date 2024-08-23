@@ -20,35 +20,76 @@ ot.RandomGenerator.SetSeed(0)
 import os
 
 if "gibbs_bepu_2024_turns" in os.getcwd():
-    from fuel_performance import FuelPerformance
+    from fission_gas import FissionGasRelease
 
-    fp = FuelPerformance()
+    fgr = FissionGasRelease()
 else:
-    from openturns.usecases import fuel_performance
+    from openturns.usecases import fission_gas
 
-    fp = fuel_performance.FuelPerformance()
-ndim = fp.Xtrain.getDimension()  # dimension of the model inputs: 3
-desc = fp.Xtrain.getDescription()  # description of the model inputs (diff, crack)
-nexp = fp.ytrain.getDimension()  # number of experiments (each has a specific model)
-models = fp.models  # the nexp models
+    fgr = fission_gas.FissionGasRelease()
+desc = fgr.get_input_description()  # description of the model inputs (diff, crack)
+ndim = len(desc) # dimension of the model inputs: 2
+nexp = fgr.measurement_values.getSize() # number of experiments (each has a specific model)
+models = fgr.models  # the nexp models
 
 # %%
 # Each experiment :math:`i` produced one measurement value,
-# which is used to define the likelihood of the associated model :math:`\mathcal{M}_i`
+# which is used to define the likelihood of the associated model :math:`\mathcal{\model}_i`
 # and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, crack})`.
 
-likes = fp.likes
+likelihoods = [ot.Normal(v, fgr.measurement_uncertainty(v)) for v in fgr.measurement_values]
 
 # %%
-# Random vector to sample the conditional posterior
-# distribution of :math:`\vect{\mu} = (\mu_{diff}, \mu_{crack})`
+# The unobserved model inputs :math:`x_{\mathrm{diff}, i}, i=1...\sampleSize_{\mathrm{exp}}`
+# (resp. :math:`x_{\mathrm{crack}, i}, i=1...\sampleSize_{\mathrm{exp}}`)
+# are i.i.d. random variable which follow a normal distribution with
+# mean parameter :math:`\mu_{\mathrm{diff}}` (resp. :math:`\mu_{\mathrm{crack}}`)
+# and standard deviation parameter :math:`\sigma_{\mathrm{diff}}` (resp. :math:`\sigma_{\mathrm{crack}}`).
+#
+# The network plot from the page :ref:`fission_gas` can thus be updated:
+#
+# .. figure:: ../../../../_static/fission_gas_network_calibration.png
+#     :align: center
+#     :alt: use case geometry
+#     :width: 50%
+#
+# In the network above, full arrows represent deterministic relationships and dashed arrows probabilistic relationships.
+# More precisely, the conditional distribution of the node at the end of two dashed arrows when (only) the starting nodes are known
+# is a normal distribution with parameters equal to these starting nodes.
+#
+# The goal of this study is to calibrate the parameters :math:`\mu_{\mathrm{diff}}`, :math:`\sigma_{\mathrm{diff}}`,
+# resp. :math:`\mu_{\mathrm{crack}}` and :math:`\sigma_{\mathrm{crack}}`.
+# To perform Bayesian calibration, we set a uniform prior distribution on :math:`\mu_{\mathrm{diff}}` and :math:`\mu_{\mathrm{crack}}`
+# and the limit of a truncated inverse gamma distribution with parameters :math:`(\lambda, k)` when :math:`\lambda \to \infty` and :math:`k \to 0`.
+# The parameters of the prior distributions are defined later.
+
+# %%
+# This choice of prior distributions means that the posterior is partially conjugate.
+# For instance, the conditional posterior distribution of :math:`\mu_{\mathrm{diff}}`
+# (resp. :math:`\mu_{\mathrm{crack}}`)
+# is truncated normal with the following parameters (for :math:`\mu_{\mathrm{crack}}` simply replace :math:`\mathrm{diff}` with :math:`\mathrm{crack}` in what follows) :
+#
+# - The truncation parameters are the bounds of the prior uniform distribution.
+# - The mean parameter is :math:`\frac{1}{\sampleSize_{\mathrm{exp}}} \sum_{i=1}^{\sampleSize_{\mathrm{exp}}} x_{\mathrm{diff}, i}`.
+# - The standard deviation parameter is :math:`\sqrt{\frac{\sigma_{\mathrm{diff}}}{\sampleSize_{\mathrm{exp}}}}`.
+#
+# Let us prepare a random vector to sample the conditional posterior
+# distributions of :math:`\mu_{diff}` and :math:`\mu_{crack}`.
 
 mu_rv = ot.RandomVector(ot.TruncatedNormal())
 mu_desc = ["$\\mu$_{{{}}}".format(label) for label in desc]
 
 # %%
-# Random vector to sample the conditional posterior
-# distribution of :math:`\vect{\sigma}^2 = (\sigma_{diff}^2, \sigma_{crack}^2)`
+# The conditional posterior distribution of :math:`\sigma_{\mathrm{diff}}`
+# (resp. :math:`\sigma_{\mathrm{crack}}`)
+# is truncated inverse gamma with the following parameters (for :math:`\sigma_{\mathrm{crack}}` simply replace :math:`\mathrm{diff}` with :math:`\mathrm{crack}` in what follows) :
+#
+# - The truncation parameters are the truncation parameters of the prior distribution.
+# - The :math:`\lambda` parameter is :math:`\frac{2}{\sum_{i=1}^{\sampleSize_{\mathrm{exp}}} \left(x_{\mathrm{diff}, i} - \mu_{\mathrm{diff}} \right)^2}`.
+# - The :math:`k` parameter is :math:`\sqrt{\frac{\sampleSize_{\mathrm{exp}}}{2}}`.
+#
+# Let us prepare a random vector to sample the conditional posterior
+# distribution of :math:`\sigma_{diff}^2` and :math:`\sigma_{crack}^2`.
 
 sigma_square_rv = ot.RandomVector(ot.TruncatedDistribution(ot.InverseGamma(), 0.0, 1.0))
 sigma_square_desc = ["$\\sigma$_{{{}}}^2".format(label) for label in desc]
@@ -173,7 +214,7 @@ class PosteriorLogDensityX(ot.OpenTURNSPythonFunction):
 
         # Setup experiment number and associated model and likelihood
         self._exp = exp
-        self._like = likes[exp]
+        self._like = likelihoods[exp]
         self._model = models[exp]
 
     def _exec(self, state):
@@ -261,7 +302,7 @@ samplers += [
 
 # %%
 # We finish with the samplers of the :math:`\vect{x}_i`, with :math:`1 \leq i \leq n_{exp}`.
-# Each of these samplers outputs points in a 3-dimensional space.
+# Each of these samplers outputs points in a :math:`\sampleSize_{\mathrm{exp}}`-dimensional space.
 # We are not able to directly sample these conditional posterior distributions,
 # so we resort to random walk Metropolis-Hastings.
 
@@ -277,11 +318,6 @@ for exp in range(nexp):
             [base_index + i for i in range(ndim)],
         )
     ]
-
-# %%
-# Run all samplers independently once to make sure they work.
-
-# sampler_realizations = [s.getRealization() for s in samplers]
 
 # %%
 # The Gibbs algorithm combines all these samplers.
@@ -359,6 +395,7 @@ _ = View(full_grid)
 ot.ResourceMap.SetAsBool("Contour-DefaultIsFilled", True)
 ot.ResourceMap.SetAsString("Contour-DefaultColorMap", "viridis")
 
+# sphinx_gallery_thumbnail_number = 3 
 for i in range(1, full_grid.getNbRows()):
     for j in range(i):
         graph = full_grid.getGraph(i, j)
@@ -376,7 +413,7 @@ _ = View(full_grid, scatter_kw={"alpha": 0.1})
 
 
 # %%
-# Retrieve the :math:`\vect{\mu}` and :math:`\vect{\sigma}^2` columns in the sample.
+# Retrieve the :math:`\mu` and :math:`\sigma^2` columns in the sample.
 
 mu = samples.getMarginal(["$\\mu$_{{{}}}".format(label) for label in desc])
 sigma_square = np.sqrt(
@@ -386,10 +423,12 @@ sigma_square = np.sqrt(
 
 # %%
 # Build the joint distribution of the latent variables :math:`x_{diff}, x_{crack}`
-# obtained when the :math:`\mu` and :math:`\sigma` parameters follow
-# their joint posterior distribution.
-# It is estimated as a mixture of truncated normal distributions
-# corresponding to the posterior samples of the :math:`\mu` and :math:`\sigma` parameters.
+# obtained when :math:`\mu_{\mathrm{diff}}`, :math:`\sigma_{\mathrm{diff}}`,
+# :math:`\mu_{\mathrm{crack}}` and :math:`\sigma_{\mathrm{crack}}` 
+# follow their joint posterior distribution.
+# It is estimated as a mixture of truncated :math:`\sampleSize_{\mathrm{exp}}`-dimensional normal distributions
+# corresponding to the posterior samples of the :math:`\mu_{\mathrm{diff}}`, :math:`\mu_{\mathrm{crack}}`, 
+# :math:`\sigma_{\mathrm{diff}}` and :math:`\sigma_{\mathrm{crack}}` parameters.
 
 truncation_interval = ot.Interval(lbs, ubs)
 normal_collection = [
@@ -418,12 +457,13 @@ prediction_ub = [sam.computeQuantile(0.95)[0] for sam in predictions]
 
 # %%
 # These push-forward distributions are the distributions
-# of the model predictions when the :math:`\mu` and :math:`\sigma` parameters follow
+# of the model predictions when :math:`\mu_{\mathrm{diff}}`, :math:`\mu_{\mathrm{crack}}`, 
+# :math:`\sigma_{\mathrm{diff}}` and :math:`\sigma_{\mathrm{crack}}` follow
 # their joint posterior distribution.
 # They can be compared to the actual measurements to represent predictive accuracy.
 
 yerr = np.abs(np.column_stack([prediction_lb, prediction_ub]).T - prediction_medians)
-plt.errorbar(fp.meas_v, prediction_medians, yerr, fmt="o")
+plt.errorbar(fgr.measurement_values, prediction_medians, yerr, fmt="o")
 plt.xscale("log")
 
 l = np.linspace(0, 0.5)
