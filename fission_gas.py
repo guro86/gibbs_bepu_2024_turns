@@ -4,7 +4,7 @@ import openturns as ot
 
 
 class FissionGasRelease:
-    """
+    r"""
     Data class for the fission gas release example.
     
     Attributes
