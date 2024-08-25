@@ -31,15 +31,13 @@ else:
     fgr = fission_gas.FissionGasRelease()
 desc = fgr.get_input_description()  # description of the model inputs (diff, crack)
 ndim = len(desc)  # dimension of the model inputs: 2
-nexp = (
-    fgr.measurement_values.getSize()
-)  # number of experiments (each has a specific model)
+nexp = fgr.measurement_values.getSize()  # number of sets of experimental conditions
 models = fgr.models  # the nexp models
 
 # %%
 # Each experiment :math:`i` produced one measurement value,
-# which is used to define the likelihood of the associated model :math:`\mathcal{\model}_i`
-# and latent variable :math:`\vect{x}_i = (x_{i, diff}, x_{i, crack})`.
+# which is used to define the likelihood of the associated model :math:`\model_i`
+# and latent variables :math:`x_{i, \mathrm{diff}}` and :math:`x_{i, \mathrm{crack}})`.
 
 likelihoods = [
     ot.Normal(v, fgr.measurement_uncertainty(v)) for v in fgr.measurement_values
@@ -48,7 +46,7 @@ likelihoods = [
 # %%
 # The unobserved model inputs :math:`x_{\mathrm{diff}, i}, i=1...\sampleSize_{\mathrm{exp}}`
 # (resp. :math:`x_{\mathrm{crack}, i}, i=1...\sampleSize_{\mathrm{exp}}`)
-# are i.i.d. random variable which follow a normal distribution with
+# are i.i.d. random variables which follow a normal distribution with
 # mean parameter :math:`\mu_{\mathrm{diff}}` (resp. :math:`\mu_{\mathrm{crack}}`)
 # and standard deviation parameter :math:`\sigma_{\mathrm{diff}}` (resp. :math:`\sigma_{\mathrm{crack}}`).
 #
